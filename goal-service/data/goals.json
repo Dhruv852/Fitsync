@@ -1,0 +1,26 @@
+[
+  {
+    "id": "sample-goal-1",
+    "userId": "demo-user-id",
+    "title": "Run 100km this month",
+    "type": "distance",
+    "target": 100,
+    "current": 35,
+    "unit": "km",
+    "deadline": "2026-05-31",
+    "status": "active",
+    "createdAt": "2026-05-01T00:00:00.000Z"
+  },
+  {
+    "id": "sample-goal-2",
+    "userId": "demo-user-id",
+    "title": "Reach target weight",
+    "type": "weight",
+    "target": 70,
+    "current": 72.5,
+    "unit": "kg",
+    "deadline": "2026-06-30",
+    "status": "active",
+    "createdAt": "2026-05-01T00:00:00.000Z"
+  }
+]

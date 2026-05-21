@@ -1,0 +1,14 @@
+[
+  {
+    "id": "sample-weight-1",
+    "userId": "demo-user-id",
+    "weight": 72.5,
+    "date": "2026-05-18"
+  },
+  {
+    "id": "sample-weight-2",
+    "userId": "demo-user-id",
+    "weight": 73.0,
+    "date": "2026-05-11"
+  }
+]

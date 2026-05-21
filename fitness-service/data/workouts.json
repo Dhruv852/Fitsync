@@ -1,0 +1,20 @@
+[
+  {
+    "id": "sample-workout-1",
+    "userId": "demo-user-id",
+    "type": "Running",
+    "duration": 30,
+    "calories": 280,
+    "notes": "Morning jog in the park",
+    "date": "2026-05-18"
+  },
+  {
+    "id": "sample-workout-2",
+    "userId": "demo-user-id",
+    "type": "Strength Training",
+    "duration": 45,
+    "calories": 320,
+    "notes": "Upper body focus",
+    "date": "2026-05-17"
+  }
+]
