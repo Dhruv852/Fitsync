@@ -276,3 +276,4 @@ MIT — free for learning and portfolio use.
 ---
 
 **FitSync** — Track smarter. Deploy faster. 🏃‍♂️
+optimised jenkins pipeline
