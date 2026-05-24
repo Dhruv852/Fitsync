@@ -1,8 +1,15 @@
 # FitSync – DevOps Enabled Fitness Tracker Platform
 
-A production-ready fitness tracking web application built with **microservices architecture**, **JSON file storage** (no database), and **DevOps** tooling (Docker, GitHub Actions, Jenkins).
+A production-ready fitness tracking web application built with **microservices architecture**, **JSON file storage** (no database), and a full **DevOps pipeline** (Docker, Docker Compose, Nginx, GitHub Actions, Jenkins).
 
-![Stack](https://img.shields.io/badge/React-18-blue) ![Node](https://img.shields.io/badge/Node-20-green) ![Docker](https://img.shields.io/badge/Docker-Compose-blue)
+![CI](https://github.com/Dhruv852/Fitsync/actions/workflows/ci.yml/badge.svg)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+![Node](https://img.shields.io/badge/Node-20-339933?logo=node.js&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![Nginx](https://img.shields.io/badge/Nginx-Gateway-009639?logo=nginx&logoColor=white)
+![Jenkins](https://img.shields.io/badge/Jenkins-Pipeline-D24939?logo=jenkins&logoColor=white)
+
+> 📖 **For a detailed DevOps explanation** (GitHub Actions, Jenkins, Docker Compose, Secrets, Health Checks) — see [DEVOPS_EXPLANATION.md](./DEVOPS_EXPLANATION.md)
 
 ---
 
@@ -184,15 +191,27 @@ Configure `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as GitHub secrets for autom
 
 ## GitHub Actions
 
-Workflow: `.github/workflows/ci.yml`
+Two workflows are configured under `.github/workflows/`:
 
-On every push/PR:
+### `ci.yml` — Continuous Integration
+Triggers on every **push** to `main`, `master`, `develop` and on **pull requests**:
+1. Setup Node.js 20
+2. Run `npm test` for all three backend services
+3. Build the React frontend (`npm run build`)
+4. Build all Docker images via `docker compose build`
+5. Push to Docker Hub on `main` branch (when `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` secrets are set)
 
-1. Install Node.js 20
-2. Run tests for all three backend services
-3. Build the React frontend
-4. Build Docker images via `docker compose build`
-5. (Optional) Push to Docker Hub on `main` branch when secrets are set
+### `docker-publish.yml` — Full CD Pipeline
+Triggers on **push to main/master** or **version tags** (`v*.*.*`) or **manual dispatch**:
+1. **Job 1 — Run Tests:** same as above, with npm cache for speed
+2. **Job 2 — Build & Push** *(only runs if Job 1 passes)*:
+   - Computes a short Git SHA tag (e.g. `abc1234`) for immutable image versioning
+   - Sets up Docker Buildx (BuildKit for layer caching)
+   - Authenticates with Docker Hub via GitHub Secrets
+   - Builds and pushes all 4 service images with both `:latest` and `:<sha>` tags
+   - Prints a summary table to the GitHub Actions UI
+
+> See [DEVOPS_EXPLANATION.md](./DEVOPS_EXPLANATION.md) for a full line-by-line walkthrough of both workflows.
 
 ---
 
