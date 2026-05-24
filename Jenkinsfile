@@ -24,8 +24,11 @@ pipeline {
         stage('Docker Compose Up') {
             steps {
                 echo 'Starting FitSync stack...'
-                sh 'docker-compose down --remove-orphans || true'
-                sh 'docker-compose up -d'
+                sh '''
+                    docker rm -f fitsync-auth fitsync-fitness fitsync-goals fitsync-frontend fitsync-gateway 2>/dev/null || true
+                    docker-compose down --remove-orphans 2>/dev/null || true
+                    docker-compose up -d
+                '''
             }
         }
     }
