@@ -9,7 +9,6 @@ A production-ready fitness tracking web application built with **microservices a
 ![Nginx](https://img.shields.io/badge/Nginx-Gateway-009639?logo=nginx&logoColor=white)
 ![Jenkins](https://img.shields.io/badge/Jenkins-Pipeline-D24939?logo=jenkins&logoColor=white)
 
-> 📖 **For a detailed DevOps explanation** (GitHub Actions, Jenkins, Docker Compose, Secrets, Health Checks) — see [DEVOPS_EXPLANATION.md](./DEVOPS_EXPLANATION.md)
 
 ---
 
@@ -211,7 +210,7 @@ Triggers on **push to main/master** or **version tags** (`v*.*.*`) or **manual d
    - Builds and pushes all 4 service images with both `:latest` and `:<sha>` tags
    - Prints a summary table to the GitHub Actions UI
 
-> See [DEVOPS_EXPLANATION.md](./DEVOPS_EXPLANATION.md) for a full line-by-line walkthrough of both workflows.
+
 
 ---
 
