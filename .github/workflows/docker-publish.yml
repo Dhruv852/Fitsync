@@ -1,0 +1,140 @@
+# ============================================================
+#  FitSync — Docker Hub Publish Pipeline
+#  Triggers on push to main/master or manual trigger.
+#  Requires GitHub Secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN
+# ============================================================
+
+name: Build & Push Docker Images
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+env:
+  IMAGE_PREFIX: fitsync
+  NODE_VERSION: "20"
+
+jobs:
+
+  # ── JOB 1: Run Tests ─────────────────────────────────────
+  test:
+    name: ✅ Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: |
+            auth-service/package-lock.json
+            fitness-service/package-lock.json
+            goal-service/package-lock.json
+            frontend/package-lock.json
+
+      - name: 🧪 Test — auth-service
+        working-directory: auth-service
+        run: |
+          npm ci
+          npm test
+
+      - name: 🧪 Test — fitness-service
+        working-directory: fitness-service
+        run: |
+          npm ci
+          npm test
+
+      - name: 🧪 Test — goal-service
+        working-directory: goal-service
+        run: |
+          npm ci
+          npm test
+
+      - name: 🏗️ Build — frontend (Vite)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+  # ── JOB 2: Build & Push images ───────────────────────────
+  docker:
+    name: 🐳 Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Compute Short SHA
+        id: meta
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Short SHA: ${SHORT_SHA}"
+
+      - name: ⚙️ Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 🚀 Build & Push — auth-service
+        uses: docker/build-push-action@v6
+        with:
+          context: ./auth-service
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-auth:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-auth:${{ steps.meta.outputs.short_sha }}
+
+      - name: 🚀 Build & Push — fitness-service
+        uses: docker/build-push-action@v6
+        with:
+          context: ./fitness-service
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-fitness:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-fitness:${{ steps.meta.outputs.short_sha }}
+
+      - name: 🚀 Build & Push — goal-service
+        uses: docker/build-push-action@v6
+        with:
+          context: ./goal-service
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-goal:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-goal:${{ steps.meta.outputs.short_sha }}
+
+      - name: 🚀 Build & Push — frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-frontend:${{ steps.meta.outputs.short_sha }}
+
+      - name: 📋 Print Summary
+        if: success()
+        run: |
+          echo "## 🎉 Docker Images Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | Tags |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ secrets.DOCKERHUB_USERNAME }}/fitsync-auth\`     | \`latest\`, \`${{ steps.meta.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ secrets.DOCKERHUB_USERNAME }}/fitsync-fitness\`  | \`latest\`, \`${{ steps.meta.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ secrets.DOCKERHUB_USERNAME }}/fitsync-goal\`     | \`latest\`, \`${{ steps.meta.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ secrets.DOCKERHUB_USERNAME }}/fitsync-frontend\` | \`latest\`, \`${{ steps.meta.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
