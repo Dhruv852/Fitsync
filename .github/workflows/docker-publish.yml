@@ -1,43 +1,35 @@
 # ============================================================
-#  FitSync — Docker Hub CI/CD Pipeline
-#  Triggers on every push to main/master or a version tag.
-#  Builds and pushes all four service images to Docker Hub.
+#  FitSync — Docker Hub Publish Pipeline
+#  Runs on push to main/master or manual trigger.
+#  Requires GitHub Secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN
 # ============================================================
 
 name: Build & Push Docker Images
 
-# ── TRIGGER ─────────────────────────────────────────────────
 on:
   push:
     branches:
       - main
       - master
     tags:
-      - "v*.*.*"          # Also fires on semantic-version tags, e.g. v1.2.3
-  workflow_dispatch:       # Allow manual trigger from the GitHub UI
+      - "v*.*.*"
+  workflow_dispatch:
 
-# ── ENVIRONMENT VARIABLES ───────────────────────────────────
-# env block defines NON-SECRET, repo-wide constants.
-# These are visible in logs and safe to hard-code here.
 env:
-  DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}   # resolved at runtime from secret
-  IMAGE_PREFIX: fitsync                                 # shared prefix for all image names
+  IMAGE_PREFIX: fitsync
   NODE_VERSION: "20"
 
-# ── JOBS ────────────────────────────────────────────────────
 jobs:
 
-  # ── JOB 1: Run tests across all services ──────────────────
+  # ── JOB 1: Run Tests ─────────────────────────────────────
   test:
     name: ✅ Run Tests
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Check out the repository at the commit that triggered the event
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Set up the Node.js runtime (version pinned via env var)
       - name: 🟢 Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
@@ -53,87 +45,66 @@ jobs:
         working-directory: auth-service
         run: |
           npm ci
-          npm test --if-present
+          npm test
 
       - name: 🧪 Test — fitness-service
         working-directory: fitness-service
         run: |
           npm ci
-          npm test --if-present
+          npm test
 
       - name: 🧪 Test — goal-service
         working-directory: goal-service
         run: |
           npm ci
-          npm test --if-present
+          npm test
 
-      - name: 🏗️  Build — frontend (Vite)
+      - name: 🏗️ Build — frontend (Vite)
         working-directory: frontend
         run: |
           npm ci
           npm run build
 
-  # ── JOB 2: Build & Push images to Docker Hub ──────────────
+  # ── JOB 2: Build & Push images ───────────────────────────
   docker:
     name: 🐳 Build & Push Docker Images
     runs-on: ubuntu-latest
-    needs: test           # Only runs if the test job succeeds
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-
-    # Compute a short Git SHA for tagging (e.g. abc1234)
-    # This lets you pull a specific commit's image later.
-    outputs:
-      short_sha: ${{ steps.meta.outputs.short_sha }}
+    needs: test
+    # Only push if Docker Hub secrets are actually configured
+    if: >
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      secrets.DOCKERHUB_USERNAME != '' &&
+      secrets.DOCKERHUB_TOKEN != ''
 
     steps:
-      # 1. Checkout
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Compute image metadata (tags & labels) reused across all builds
-      - name: 🏷️  Compute Image Metadata
+      - name: 🏷️ Compute Short SHA
         id: meta
         run: |
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "Short SHA: ${SHORT_SHA}"
 
-      # 3. Set up Docker Buildx — enables BuildKit features like
-      #    layer caching, multi-platform builds, and inline cache.
-      - name: ⚙️  Set up Docker Buildx
+      - name: ⚙️ Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 4. Authenticate with Docker Hub using SECRETS.
-      #    DOCKERHUB_USERNAME and DOCKERHUB_TOKEN are stored in
-      #    Settings → Secrets and Variables → Actions on GitHub.
-      #    They are NEVER printed in logs (GitHub masks them).
       - name: 🔐 Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # ── Build & Push: frontend ─────────────────────────────
       - name: 🚀 Build & Push — frontend
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
-          file: ./frontend/Dockerfile
           push: true
-          # Two tags: a rolling "latest" and an immutable commit-pinned tag
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/app-ci:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/app-ci:${{ steps.meta.outputs.short_sha }}
-          # OCI standard labels — useful for traceability in Docker Hub
-          labels: |
-            org.opencontainers.image.title=FitSync Frontend
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          # Cache layers from Docker Hub to speed up subsequent builds
-          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/app-ci:buildcache
-          cache-to:   type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/app-ci:buildcache,mode=max
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-frontend:${{ steps.meta.outputs.short_sha }}
 
-      # ── Build & Push: auth-service ─────────────────────────
       - name: 🚀 Build & Push — auth-service
         uses: docker/build-push-action@v6
         with:
@@ -142,14 +113,7 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-auth:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-auth:${{ steps.meta.outputs.short_sha }}
-          labels: |
-            org.opencontainers.image.title=FitSync Auth Service
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-auth:buildcache
-          cache-to:   type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-auth:buildcache,mode=max
 
-      # ── Build & Push: fitness-service ─────────────────────
       - name: 🚀 Build & Push — fitness-service
         uses: docker/build-push-action@v6
         with:
@@ -158,14 +122,7 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-fitness:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-fitness:${{ steps.meta.outputs.short_sha }}
-          labels: |
-            org.opencontainers.image.title=FitSync Fitness Service
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-fitness:buildcache
-          cache-to:   type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-fitness:buildcache,mode=max
 
-      # ── Build & Push: goal-service ────────────────────────
       - name: 🚀 Build & Push — goal-service
         uses: docker/build-push-action@v6
         with:
@@ -174,14 +131,7 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-goal:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-goal:${{ steps.meta.outputs.short_sha }}
-          labels: |
-            org.opencontainers.image.title=FitSync Goal Service
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-goal:buildcache
-          cache-to:   type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_PREFIX }}-goal:buildcache,mode=max
 
-      # 5. Post a summary to the GitHub Actions job summary page
       - name: 📋 Print Summary
         if: success()
         run: |
@@ -189,7 +139,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Image | Tags |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|------|" >> $GITHUB_STEP_SUMMARY
-          echo "| \`${{ secrets.DOCKERHUB_USERNAME }}/app-ci\`            | \`latest\`, \`${{ steps.meta.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| \`${{ secrets.DOCKERHUB_USERNAME }}/fitsync-auth\`      | \`latest\`, \`${{ steps.meta.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| \`${{ secrets.DOCKERHUB_USERNAME }}/fitsync-fitness\`   | \`latest\`, \`${{ steps.meta.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| \`${{ secrets.DOCKERHUB_USERNAME }}/fitsync-goal\`      | \`latest\`, \`${{ steps.meta.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ secrets.DOCKERHUB_USERNAME }}/fitsync-frontend\` | \`latest\`, \`${{ steps.meta.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ secrets.DOCKERHUB_USERNAME }}/fitsync-auth\`     | \`latest\`, \`${{ steps.meta.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ secrets.DOCKERHUB_USERNAME }}/fitsync-fitness\`  | \`latest\`, \`${{ steps.meta.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ secrets.DOCKERHUB_USERNAME }}/fitsync-goal\`     | \`latest\`, \`${{ steps.meta.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
